@@ -51,45 +51,48 @@ export default function App() {
       return;
     }
 
-    if (!audioStreamerRef.current) {
-      audioStreamerRef.current = new AudioStreamer();
-    }
-    if (!liveSessionRef.current) {
-      liveSessionRef.current = new LiveSession(apiKey);
-    }
-
-    await liveSessionRef.current.connect({
-      onStateChange: (newState) => setState(newState),
-      onAudioData: (base64) => {
-        audioStreamerRef.current?.addAudioChunk(base64);
-        setIsSpeaking(true);
-      },
-      onInterrupted: () => {
-        audioStreamerRef.current?.clearQueue();
-        setIsSpeaking(false);
-      },
-      onTranscription: (text, isModel) => {
-        if (isModel) {
-          setTranscription(text);
-        }
-      },
-      onToolCall: (name, args) => {
-        if (name === "openWebsite") {
-          window.open(args.url, "_blank");
-        }
-      }
-    });
-
     try {
+      if (!audioStreamerRef.current) {
+        audioStreamerRef.current = new AudioStreamer();
+      }
+      
+      // Start audio FIRST to ensure user gesture context is preserved for the permission prompt
       await audioStreamerRef.current.start((base64) => {
         liveSessionRef.current?.sendAudio(base64);
         setIsListening(true);
+      });
+
+      if (!liveSessionRef.current) {
+        liveSessionRef.current = new LiveSession(apiKey);
+      }
+
+      await liveSessionRef.current.connect({
+        onStateChange: (newState) => setState(newState),
+        onAudioData: (base64) => {
+          audioStreamerRef.current?.addAudioChunk(base64);
+          setIsSpeaking(true);
+        },
+        onInterrupted: () => {
+          audioStreamerRef.current?.clearQueue();
+          setIsSpeaking(false);
+        },
+        onTranscription: (text, isModel) => {
+          if (isModel) {
+            setTranscription(text);
+          }
+        },
+        onToolCall: (name, args) => {
+          if (name === "openWebsite") {
+            window.open(args.url, "_blank");
+          }
+        }
       });
     } catch (error) {
       console.error("Microphone error:", error);
       setState("error");
       setTranscription("Microphone access denied. Please allow microphone access in your browser.");
       liveSessionRef.current?.disconnect();
+      audioStreamerRef.current?.stop();
       return;
     }
   }, [state]);
@@ -194,16 +197,25 @@ export default function App() {
         </AnimatePresence>
       </footer>
 
-      {/* Error Toast */}
+      {/* Error Toast / Troubleshooting */}
       <AnimatePresence>
         {state === "error" && (
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-8 px-6 py-3 rounded-2xl bg-red-500/10 border border-red-500/50 backdrop-blur-md text-red-400 text-sm font-medium z-50"
+            className="fixed bottom-8 px-6 py-4 rounded-2xl bg-red-500/10 border border-red-500/50 backdrop-blur-md text-red-400 text-sm font-medium z-50 max-w-sm text-center"
           >
-            System Error: Check API Configuration
+            <p className="mb-2 font-bold uppercase tracking-wider">Microphone Access Denied</p>
+            <p className="text-xs text-red-300/80 mb-3">
+              I can't hear you! Please check your browser's address bar to allow microphone access.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="px-4 py-1.5 rounded-full bg-red-500 text-white text-[10px] uppercase tracking-widest hover:bg-red-600 transition-colors"
+            >
+              Reload & Retry
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

@@ -15,11 +15,19 @@ export class AudioStreamer {
   constructor(private sampleRate: number = 16000, private outputSampleRate: number = 24000) {}
 
   async start(onAudioData: (base64Data: string) => void) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error("Your browser does not support microphone access.");
+    }
+
+    this.stream = await navigator.mediaDevices.getUserMedia({ 
+      audio: true 
+    });
+
     this.audioContext = new AudioContext({ sampleRate: this.sampleRate });
     if (this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
     }
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
     this.source = this.audioContext.createMediaStreamSource(this.stream);
     
     // Using ScriptProcessorNode for simplicity in this environment, 
